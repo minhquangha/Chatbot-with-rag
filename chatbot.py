@@ -1,6 +1,3 @@
-from langchain_community.document_loaders import DirectoryLoader, UnstructuredFileLoader
-from langchain_text_splitters import RecursiveCharacterTextSplitter
-from langchain_community.document_loaders import DirectoryLoader, UnstructuredFileLoader
 from langchain_community.vectorstores import FAISS
 from adapter import SentenceTransformerEmbeddings
 from langchain_community.vectorstores.utils import DistanceStrategy
@@ -8,53 +5,22 @@ from langchain_core.prompts import ChatPromptTemplate
 from langchain_core.output_parsers import StrOutputParser
 from langchain_core.runnables import RunnablePassthrough
 from dotenv import load_dotenv
-from google import genai
 from langchain_openai import ChatOpenAI
+from load import embeddings
 load_dotenv()
 
-loader = DirectoryLoader(
-    path="./papers",
-    glob="**/*.pdf",
-    loader_cls=UnstructuredFileLoader, #dùng để đọc dữ liệu loại file
-    show_progress=True,
-    use_multithreading= True
-)
-docs= loader.load()
-
-MARKDOWN_SEPARATORS = [
-    "\n#{1,6} ",
-    "```\n",
-    "\n\\*\\*\\*+\n",
-    "\n---+\n",
-    "\n___+\n",
-    "\n\n",
-    "\n",
-    " ",
-    "",
-]
-
-text_splitter =  RecursiveCharacterTextSplitter(
-    chunk_size = 1200,    # Số ký tự tối đa cho mỗi chunk
-    chunk_overlap=50,     # Số ký tự ghi đè giữa các chunk để giữ ngữ cảnh
-    add_start_index = True,
-    strip_whitespace = True,
-    separators=MARKDOWN_SEPARATORS
-)
-
-splits = text_splitter.split_documents(docs)
-from pprint import pprint
-pprint(splits)
+def format_docs(docs):
+    return "\n\n".join(
+        f"--- Đoạn trích từ {doc.metadata.get('source', 'Unknown')} ---\n{doc.page_content.strip()}"
+        for doc in docs
+    )
 
 
-from sentence_transformers import SentenceTransformer
-# embbedding chunks -> vector 
-model = SentenceTransformer("sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2")
-texts  = [chunk.page_content for chunk in splits]
-embeddings = SentenceTransformerEmbeddings(model_name="sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2")
-vectorstore = FAISS.from_documents(
-    documents=splits,
-    embedding=embeddings,
-    distance_strategy = DistanceStrategy.COSINE
+vectorstore = FAISS.load_local(
+    folder_path="vectorstore_cache",
+    embeddings=embeddings,
+    distance_strategy = DistanceStrategy.COSINE,
+    allow_dangerous_deserialization=True
 )
 retriever = vectorstore.as_retriever(
     search_type ="similarity",
@@ -83,15 +49,18 @@ llm = ChatOpenAI(
 )
 
 rag_chain =  (
-    {"context":retriever,"question":RunnablePassthrough()}
+    {"context":retriever| format_docs,"question":RunnablePassthrough()}
     | prompt
     | llm
     |StrOutputParser()
 )
 
-question = input("Question: ")
-answer = rag_chain.invoke(question)
-print(answer)
+while True:
+    question = input("Question: ")
+    if question == "exit":
+        break
+    answer = rag_chain.invoke(question)
+    print("Answer:",answer)
 
 
 
