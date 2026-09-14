@@ -1,13 +1,17 @@
+import sys
+if hasattr(sys.stdout, "reconfigure"):
+    sys.stdout.reconfigure(encoding="utf-8")
+
 from dotenv import load_dotenv
-from langchain_google_genai import ChatGoogleGenerativeAI
 from langchain_openai import ChatOpenAI
-import os
+import config
+
 load_dotenv()
 
 llm = ChatOpenAI(
-    model="deepseek-v4-flash-0731",
-    temperature=0,
-    base_url="https://token-plan.ap-southeast-1.maas.aliyuncs.com/compatible-mode/v1"
+    model=config.LLM_MODEL,
+    temperature=config.LLM_TEMPERATURE,
+    base_url=config.LLM_BASE_URL
 )
 
 print("Before invoke")
